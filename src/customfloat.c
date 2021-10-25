@@ -321,7 +321,19 @@ static PyTypeObject CustomFloat_Type = {
     .tp_methods = &CustomFloat_methods};
 
 /* ------------------------ NumPy support ---------------------------------- */
-
+/* DTypeMeta type definition*/
+static PyArray_DTypeMeta CustomFloat_DType = {{{PyVarObject_HEAD_INIT(NULL, 0)
+                                                    .tp_name = "npdt.customfloat",
+                                                .tp_doc = "custom float",
+                                                .tp_basicsize = sizeof(CustomFloat),
+                                                .tp_itemsize = 0,
+                                                .tp_flags = Py_TPFLAGS_BASETYPE | Py_TPFLAGS_DEFAULT,
+                                                .tp_new = CustomFloat_new,
+                                                .tp_init = (initproc)CustomFloat_init,
+                                                .tp_repr = (reprfunc)CustomFloat_repr,
+                                                .tp_str = (reprfunc)CustomFloat_str,
+                                                .tp_as_number = &CustomFloat_as_number,
+                                                .tp_methods = &CustomFloat_methods}}};
 /* DType slots */
 
 static PyObject *
@@ -451,12 +463,10 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     spec.casts = &castingimpls[0];
 
     /* Create the dtype*/
-    PyArray_DTypeMeta meta;
-    // PyObject *CustomFloatDType = PyArrayInitDTypeMeta_FromSpec(&meta, &spec);
-    // if (!CustomFloatDType)
-    // {
-    //     goto fail;
-    // }
+    if (PyArrayInitDTypeMeta_FromSpec(&CustomFloat_DType, &spec) < 0)
+    {
+        goto fail;
+    }
 
     /* Create the module*/
     m = PyModule_Create(&moduledef);
