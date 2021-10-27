@@ -323,17 +323,8 @@ static PyTypeObject CustomFloat_Type = {
 /* ------------------------ NumPy support ---------------------------------- */
 /* DTypeMeta type definition*/
 static PyArray_DTypeMeta CustomFloat_DType = {{{PyVarObject_HEAD_INIT(NULL, 0)
-                                                    .tp_name = "npdt.customfloat",
-                                                .tp_doc = "custom float",
-                                                .tp_basicsize = sizeof(CustomFloat),
-                                                .tp_itemsize = 0,
-                                                .tp_flags = Py_TPFLAGS_BASETYPE | Py_TPFLAGS_DEFAULT,
-                                                .tp_new = CustomFloat_new,
-                                                .tp_init = (initproc)CustomFloat_init,
-                                                .tp_repr = (reprfunc)CustomFloat_repr,
-                                                .tp_str = (reprfunc)CustomFloat_str,
-                                                .tp_as_number = &CustomFloat_as_number,
-                                                .tp_methods = &CustomFloat_methods}}};
+                                                    .tp_basicsize = sizeof(PyArray_Descr),
+                                                .tp_name = "customfloat_dtypemeta"}}};
 /* DType slots */
 
 static PyObject *
@@ -405,7 +396,7 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     PyObject *numpy_str;
     PyObject *numpy;
 
-    int experimental_dtype_version = 1;
+    int experimental_dtype_version = 2;
     if (import_experimental_dtype_api(experimental_dtype_version) < 0)
     {
         return NULL;
@@ -435,6 +426,13 @@ PyMODINIT_FUNC PyInit_customfloat(void)
 
     /* Initialize customfloat type*/
     if (PyType_Ready(&CustomFloat_Type) < 0)
+    {
+        goto fail;
+    }
+
+    Py_SET_TYPE(&CustomFloat_DType, &PyArrayDTypeMeta_Type);
+    ((PyTypeObject *)&CustomFloat_DType)->tp_base = &PyArrayDescr_Type;
+    if (PyType_Ready(&CustomFloat_DType) < 0)
     {
         goto fail;
     }
