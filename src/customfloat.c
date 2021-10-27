@@ -455,10 +455,10 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     slots[4].slot = NPY_DT_discover_descr_from_pyobject;
     slots[4].pfunc = (void *)CustomFloatArray_discover_descr_from_pyobject;
     slots[5].slot = 0;
-    slots[6].pfunc = NULL;
+    slots[5].pfunc = NULL;
     PyArrayMethod_Spec *castingimpls[1];
     castingimpls[0] = NULL;
-    spec.casts = &castingimpls[0];
+    spec.casts = castingimpls;
 
     /* Create the dtype*/
     if (PyArrayInitDTypeMeta_FromSpec(&CustomFloat_DType, &spec) < 0)
