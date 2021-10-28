@@ -321,14 +321,44 @@ static PyTypeObject CustomFloat_Type = {
     .tp_methods = &CustomFloat_methods};
 
 /* ------------------------ NumPy support ---------------------------------- */
+
+
+static PyObject *
+CustomFloatDType_new(struct CustomFloat_DType *cls,
+        PyObject *args, PyObject *kwargs)
+{
+    PyArray_Descr *new = (PyArray_Descr *)(PyArrayDescr_Type.tp_new(
+            cls, args, kwargs));
+    if (new == NULL) {
+        return NULL;
+    }
+    new->elsize = sizeof(CustomFloat);  // TODO: Should only store the double!
+    new->alignment = sizeof(double);  // FIXME
+    return new;
+}
+
+
+static PyObject *
+CustomFloatDType_repr(struct CustomFloat_DType *self)
+{
+    return PyUnicode_FromFormat("custom_dtype");
+}
+
+
 /* DTypeMeta type definition*/
-static PyArray_DTypeMeta CustomFloat_DType = {{{PyVarObject_HEAD_INIT(NULL, 0)
-                                                    .tp_basicsize = sizeof(PyArray_Descr),
-                                                .tp_name = "customfloat_dtypemeta"}}};
+static PyArray_DTypeMeta CustomFloat_DType = {{{
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_flags = Py_TPFLAGS_HEAPTYPE,
+    .tp_basicsize = sizeof(PyArray_Descr),
+    .tp_name = "customfloat_dtypemeta",
+    .tp_new = CustomFloatDType_new,
+    .tp_repr = (reprfunc)CustomFloatDType_repr,
+    .tp_str = (reprfunc)CustomFloatDType_repr,
+}}};
 /* DType slots */
 
 static PyObject *
-CustomFloatArray_getitem(void *data, void *NPY_UNUSED(arr))
+CustomFloatArray_getitem(PyArray_Descr *self, char *data)
 {
     CustomFloat c;
     memcpy(&c, data, sizeof(c));
@@ -338,25 +368,30 @@ CustomFloatArray_getitem(void *data, void *NPY_UNUSED(arr))
 }
 
 static int
-CustomFloatArray_setitem(PyObject *item, CustomFloat *cp, void *NPY_UNUSED(ap))
+CustomFloatArray_setitem(PyArray_Descr *self, PyObject *item, char *data)
 {
     if (CustomFloat_Check(item))
     {
-        memcpy(cp, ((CustomFloat *)item), sizeof(CustomFloat));
+        memcpy(data, ((CustomFloat *)item), sizeof(CustomFloat));
+        return 0;
+
     }
-    else if (PyFloat_Check(item))
+    /* TODO: The array should only hold the value, not the "whole object". */
+    CustomFloat cp;
+    if (PyFloat_Check(item))
     {
-        cp->value = PyFloat_AsDouble(item);
+        cp.value = PyFloat_AsDouble(item);
     }
     else if (PyLong_Check(item))
     {
-        cp->value = PyFloat_AsDouble(item);
+        cp.value = PyFloat_AsDouble(item);
     }
     else
     {
         PyErr_SetString(PyExc_TypeError, "unknown input to setitem");
         return -1;
     }
+    memcpy(data, (void *)&cp, sizeof(CustomFloat));
     return 0;
 }
 
@@ -364,19 +399,21 @@ static PyObject *
 CustomFloatArray_common_dtype(PyArray_DTypeMeta *self, PyArray_DTypeMeta *other)
 {
     Py_INCREF(Py_NotImplemented);
-    return (PyObject *)Py_NotImplemented;
+    return Py_NotImplemented;
 }
 
 static PyArray_Descr *
 CustomFloatArray_common_instance(PyArray_Descr *descr1, PyArray_Descr *descr2)
 {
     PyErr_SetString(PyExc_ValueError, "Not implemented yet");
+    return NULL;
 }
 
 static PyArray_Descr *
 CustomFloatArray_discover_descr_from_pyobject(PyArray_DTypeMeta *cls, PyObject *obj)
 {
     PyErr_SetString(PyExc_ValueError, "discover_descr_from_pyobj was called. not impl");
+    return NULL;
 }
 
 static int
@@ -509,10 +546,10 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     slots[2].pfunc = (void *)CustomFloatArray_setitem;
     slots[3].slot = NPY_DT_getitem;
     slots[3].pfunc = (void *)CustomFloatArray_getitem;
-    slots[4].slot = NPY_DT_discover_descr_from_pyobject;
-    slots[4].pfunc = (void *)CustomFloatArray_discover_descr_from_pyobject;
-    slots[5].slot = 0;
-    slots[5].pfunc = NULL;
+    // slots[4].slot = NPY_DT_discover_descr_from_pyobject;
+    // slots[4].pfunc = (void *)CustomFloatArray_discover_descr_from_pyobject;
+    slots[4].slot = 0;
+    slots[4].pfunc = NULL;
     PyArrayMethod_Spec *castingimpls[1];
     spec.casts = castingimpls;
     PyArrayMethod_Spec casting_spec;
