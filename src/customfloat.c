@@ -379,6 +379,63 @@ CustomFloatArray_discover_descr_from_pyobject(PyArray_DTypeMeta *cls, PyObject *
     PyErr_SetString(PyExc_ValueError, "discover_descr_from_pyobj was called. not impl");
 }
 
+static int
+cast_customfloat_to_customfloat_aligned(PyArrayMethod_Context *context,
+                                        char *const data[],
+                                        npy_intp const dimensions[],
+                                        npy_intp const strides[],
+                                        NpyAuxData *auxdata)
+{
+    npy_intp N = dimensions[0];
+    char *in = data[0];
+    char *out = data[1];
+    for (npy_intp i = 0; i < N; i++)
+    {
+        *(double *)out = *(double *)in;
+        in += strides[0];
+        out += strides[1];
+    }
+    return 0;
+}
+
+static int
+cast_customfloat_to_customfloat_unaligned(PyArrayMethod_Context *context,
+                                          char *const data[],
+                                          npy_intp const dimensions[],
+                                          npy_intp const strides[],
+                                          NpyAuxData *auxdata)
+{
+    npy_intp N = dimensions[0];
+    char *in = data[0];
+    char *out = data[1];
+    for (npy_intp i = 0; i < N; i++)
+    {
+        memcpy(out, in, sizeof(double));
+        in += strides[0];
+        out += strides[1];
+    }
+    return 0;
+}
+
+static int
+cast_float_to_customfloat(PyArrayMethod_Context *context,
+                          char *const data[],
+                          npy_intp const dimensions[],
+                          npy_intp const strides[],
+                          NpyAuxData *auxdata)
+{
+    npy_intp N = dimensions[0];
+    char *in = data[0];
+    char *out = data[1];
+    for (npy_intp i = 0; i < N; i++)
+    {
+        *(double *)out = *(double *)in;
+        in += strides[0];
+        out += strides[1];
+    }
+    return 0;
+}
+
 /* ----------------- module def --------------------------------- */
 
 PyMethodDef module_methods[] = {
@@ -440,7 +497,7 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     /* Initialize DTypeMeta spec*/
     PyArrayDTypeMeta_Spec spec;
     spec.typeobj = &CustomFloat_Type;
-    spec.flags = 0;
+    spec.flags = 0; // not abstract or parametric
     spec.baseclass = NULL;
     PyType_Slot slots[6];
     spec.slots = slots;
@@ -457,8 +514,25 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     slots[5].slot = 0;
     slots[5].pfunc = NULL;
     PyArrayMethod_Spec *castingimpls[1];
-    castingimpls[0] = NULL;
     spec.casts = castingimpls;
+    PyArrayMethod_Spec casting_spec;
+    casting_spec.name = "customfloat_to_customfloat_cast";
+    casting_spec.casting = NPY_SAME_KIND_CASTING;
+    casting_spec.nin = 1;
+    casting_spec.nout = 1;
+    casting_spec.flags = NPY_METH_SUPPORTS_UNALIGNED;
+    PyObject *dtypes[2] = {NULL, NULL};
+    casting_spec.dtypes = dtypes;
+    PyType_Slot meth_slots[3] = {{0, NULL}};
+    meth_slots[0].slot = NPY_METH_strided_loop;
+    meth_slots[0].pfunc = &cast_customfloat_to_customfloat_aligned;
+    meth_slots[1].slot = NPY_METH_unaligned_strided_loop;
+    meth_slots[1].pfunc = &cast_customfloat_to_customfloat_unaligned;
+    casting_spec.slots = meth_slots;
+    castingimpls[0] = &casting_spec;
+    // casting_spec.name = "float_to_customfloat_cast";
+    // casting_spec.flags = NPY_METH_NO_FLOATINGPOINT_ERRORS;
+    // PyArray_DTypeMeta *double_DType; // PyArray_DTypeFromTypeNum not exposed
 
     /* Create the dtype*/
     if (PyArrayInitDTypeMeta_FromSpec(&CustomFloat_DType, &spec) < 0)
