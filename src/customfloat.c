@@ -321,34 +321,42 @@ static PyTypeObject CustomFloat_Type = {
     .tp_methods = &CustomFloat_methods};
 
 /* ------------------------ NumPy support ---------------------------------- */
-
+#define NPY_DTYPE(descr) ((PyArray_DTypeMeta *)Py_TYPE(descr))
+static NPY_INLINE PyArray_DTypeMeta *
+PyArray_DTypeFromTypeNum(int typenum)
+{
+    PyArray_Descr *descr = PyArray_DescrFromType(typenum);
+    PyArray_DTypeMeta *dtype = NPY_DTYPE(descr);
+    Py_INCREF(dtype);
+    Py_DECREF(descr);
+    return dtype;
+}
 
 static PyObject *
 CustomFloatDType_new(struct CustomFloat_DType *cls,
-        PyObject *args, PyObject *kwargs)
+                     PyObject *args, PyObject *kwargs)
 {
     PyArray_Descr *new = (PyArray_Descr *)(PyArrayDescr_Type.tp_new(
-            cls, args, kwargs));
-    if (new == NULL) {
+        cls, args, kwargs));
+    if (new == NULL)
+    {
         return NULL;
     }
-    new->elsize = sizeof(CustomFloat);  // TODO: Should only store the double!
-    new->alignment = sizeof(double);  // FIXME
+    new->elsize = sizeof(CustomFloat); // TODO: Should only store the double!
+    new->alignment = sizeof(double);   // FIXME
     return new;
 }
-
 
 static PyObject *
 CustomFloatDType_repr(struct CustomFloat_DType *self)
 {
-    return PyUnicode_FromFormat("custom_dtype");
+    return PyUnicode_FromFormat("customfloat_dtype");
 }
-
 
 /* DTypeMeta type definition*/
 static PyArray_DTypeMeta CustomFloat_DType = {{{
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_flags = Py_TPFLAGS_HEAPTYPE,
+        .tp_flags = Py_TPFLAGS_HEAPTYPE,
     .tp_basicsize = sizeof(PyArray_Descr),
     .tp_name = "customfloat_dtypemeta",
     .tp_new = CustomFloatDType_new,
@@ -374,7 +382,6 @@ CustomFloatArray_setitem(PyArray_Descr *self, PyObject *item, char *data)
     {
         memcpy(data, ((CustomFloat *)item), sizeof(CustomFloat));
         return 0;
-
     }
     /* TODO: The array should only hold the value, not the "whole object". */
     CustomFloat cp;
@@ -546,11 +553,13 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     slots[2].pfunc = (void *)CustomFloatArray_setitem;
     slots[3].slot = NPY_DT_getitem;
     slots[3].pfunc = (void *)CustomFloatArray_getitem;
-    // slots[4].slot = NPY_DT_discover_descr_from_pyobject;
-    // slots[4].pfunc = (void *)CustomFloatArray_discover_descr_from_pyobject;
     slots[4].slot = 0;
     slots[4].pfunc = NULL;
-    PyArrayMethod_Spec *castingimpls[1];
+    // slots[4].slot = NPY_DT_discover_descr_from_pyobject;
+    // slots[4].pfunc = (void *)CustomFloatArray_discover_descr_from_pyobject;
+    slots[5].slot = 0;
+    slots[5].pfunc = NULL;
+    PyArrayMethod_Spec *castingimpls[2];
     spec.casts = castingimpls;
     PyArrayMethod_Spec casting_spec;
     casting_spec.name = "customfloat_to_customfloat_cast";
@@ -567,9 +576,21 @@ PyMODINIT_FUNC PyInit_customfloat(void)
     meth_slots[1].pfunc = &cast_customfloat_to_customfloat_unaligned;
     casting_spec.slots = meth_slots;
     castingimpls[0] = &casting_spec;
-    // casting_spec.name = "float_to_customfloat_cast";
-    // casting_spec.flags = NPY_METH_NO_FLOATINGPOINT_ERRORS;
-    // PyArray_DTypeMeta *double_DType; // PyArray_DTypeFromTypeNum not exposed
+    PyArrayMethod_Spec casting_spec1;
+    casting_spec1.name = "float_to_customfloat_cast";
+    casting_spec1.casting = NPY_SAFE_CASTING;
+    casting_spec1.nin = 1;
+    casting_spec1.nout = 1;
+    casting_spec1.flags = NPY_METH_NO_FLOATINGPOINT_ERRORS;
+    PyArray_DTypeMeta *double_DType = PyArray_DTypeFromTypeNum(NPY_DOUBLE);
+    Py_DecRef(double_DType);
+    PyArray_DTypeMeta *dtypes1[2] = {double_DType, &CustomFloat_DType};
+    casting_spec1.dtypes = dtypes1;
+    PyType_Slot meth_slots1[2] = {{0, NULL}};
+    meth_slots1[0].slot = NPY_METH_strided_loop;
+    meth_slots1[0].pfunc = &cast_float_to_customfloat;
+    casting_spec1.slots = meth_slots1;
+    castingimpls[1] = &casting_spec1;
 
     /* Create the dtype*/
     if (PyArrayInitDTypeMeta_FromSpec(&CustomFloat_DType, &spec) < 0)
