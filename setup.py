@@ -1,8 +1,5 @@
 """Numpy's new DType"""
 import os
-import sys
-import pathlib
-import sysconfig
 from setuptools import setup, Extension
 
 import numpy as np
@@ -15,7 +12,13 @@ extensions = [
     Extension(
         name="npdt.customfloat",
         sources=["src/customfloat.c"],
-        include_dirs=[np.get_include(),],
+        include_dirs=[np.get_include()],
+        extra_compile_args=extra_compile_args,
+    ),
+    Extension(
+        name="npdt.float_dtype",
+        sources=["src/float_dtype.c"],
+        include_dirs=[np.get_include()],
         extra_compile_args=extra_compile_args,
     ),
 ]

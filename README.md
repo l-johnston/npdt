@@ -1,6 +1,6 @@
 # npdt - Experiment with Numpy's new DType
 
-The first experiment is to create a simple floating point DType called `customfloat`
+The first experiment is to create a simple floating point DType called `FloatDType`
 to work through the mechanics of the new API without additional complexity.
 
 As of 2021-10-24:
@@ -10,19 +10,14 @@ As of 2021-10-24:
 - clone npdt repo
 - create virtual env
 - install numpy, etc.
-- pip install -e .
+- python setup.py build develop
 - export NUMPY_EXPERIMENTAL_DTYPE_API=1
 
 Usage
 ```
->>> from npdt import customfloat
->>> customfloat(2)
-2
->>> 2*_
-4
->>> 2+_
-6
+>>> from npdt import FloatDType
+>>> dt = FloatDType()
+>>> import numpy as np
+>>> np.array([1.0, 2.0], dtype=dt)
+array([1.0, 2.0], dtype=FloatDType)
 ```
-
-At the moment, having trouble with `PyArrayDTypeMeta_Spec`, `PyArray_DTypeMeta` and
-`PyArrayDTypeMeta_Type`.
