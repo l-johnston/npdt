@@ -16,6 +16,7 @@
     v)
 
 #define NPY_DTYPE(descr) ((PyArray_DTypeMeta *)Py_TYPE(descr))
+
 static NPY_INLINE PyArray_DTypeMeta *
 PyArray_DTypeFromTypeNum(int typenum)
 {
@@ -119,7 +120,7 @@ float_repr(PyArray_FloatDescr *self)
 
 static PyArray_DTypeMeta PyArray_FloatDType = {{{
     PyVarObject_HEAD_INIT(NULL, 0)
-        .tp_name = "FloatDType",
+        .tp_name = "npdt.float_dtype.FloatDType",
     .tp_methods = float_methods,
     .tp_new = float_new,
     .tp_repr = (reprfunc)float_repr,
@@ -162,6 +163,89 @@ cast_float_to_float_aligned(PyArrayMethod_Context *context,
     return 0;
 }
 
+static NPY_CASTING
+float_to_float_resolve_descriptors(PyObject *NPY_UNUSED(method), PyArray_DTypeMeta *NPY_UNUSED(dtypes[2]), PyArray_Descr *given_descrs[2], PyArray_Descr *loop_descrs[2])
+{
+    loop_descrs[0] = given_descrs[0];
+    Py_INCREF(loop_descrs[0]);
+    if (given_descrs[1] == NULL)
+    {
+        loop_descrs[1] = given_descrs[0];
+    }
+    else
+    {
+        loop_descrs[1] = given_descrs[1];
+    }
+    Py_INCREF(loop_descrs[1]);
+    return NPY_SAME_KIND_CASTING;
+}
+
+static NPY_CASTING
+pyfloat_to_from_float_resolve_descriptors(PyObject *NPY_UNUSED(method), PyArray_DTypeMeta *dtypes[2], PyArray_Descr *given_descrs[2], PyArray_Descr *loop_descrs[2])
+{
+    loop_descrs[0] = given_descrs[0];
+    if (loop_descrs[0] == NULL)
+    {
+        return -1;
+    }
+    Py_INCREF(loop_descrs[0]);
+    loop_descrs[1] = given_descrs[1];
+    if (loop_descrs[1] == NULL)
+    {
+        return -1;
+    }
+    Py_INCREF(loop_descrs[1]);
+    return NPY_NO_CASTING | _NPY_CAST_IS_VIEW;
+}
+
+static int
+multipy_floats(PyArrayMethod_Context *context, char **data, npy_intp *dimensions, npy_intp *strides, void *userdata)
+{
+    npy_intp N = dimensions[0];
+    char *in1 = data[0];
+    char *in2 = data[1];
+    char *out = data[2];
+    for (npy_intp i = 0; i < N; i++)
+    {
+        *(double *)out = *(double *)in1 * *(double *)in2;
+        in1 += strides[0];
+        in2 += strides[1];
+        out += strides[2];
+    }
+    return 0;
+}
+
+static NPY_CASTING
+multiply_floats_resolve_descriptors(PyObject *method, PyObject *dtypes[3], PyObject *given_descrs[3], PyObject *loop_descrs[3])
+{
+    loop_descrs[2] = given_descrs[0];
+    if (loop_descrs[2] == 0)
+    {
+        return -1;
+    }
+    Py_INCREF(given_descrs[0]);
+    loop_descrs[0] = given_descrs[0];
+    Py_INCREF(given_descrs[1]);
+    loop_descrs[1] = given_descrs[1];
+    return NPY_NO_CASTING;
+}
+
+static int
+promote_to_float(PyUFuncObject *ufunc, PyObject *dtypes[3], PyObject *signature[3], PyObject *new_dtypes[3])
+{
+    for (int i = 0; i < 3; i++)
+    {
+        PyArray_DTypeMeta *new = &PyArray_FloatDType;
+        if (signature[i] != NULL)
+        {
+            new = signature[i];
+        }
+        Py_INCREF(new);
+        new_dtypes[i] = new;
+    }
+    return 0;
+}
+
 PyObject *
 get_anint(PyObject *self, PyObject *args)
 {
@@ -186,6 +270,7 @@ PyInit_float_dtype(void)
     PyObject *m = NULL;
     PyObject *numpy_str;
     PyObject *numpy;
+    PyObject *ufunc;
 
     int experimental_dtype_version = 2;
     if (import_experimental_dtype_api(experimental_dtype_version) < 0)
@@ -214,6 +299,12 @@ PyInit_float_dtype(void)
     {
         goto fail;
     }
+    ufunc = PyObject_GetAttrString(numpy, "multiply");
+    Py_DECREF(numpy);
+    if (ufunc == NULL)
+    {
+        goto fail;
+    }
     Py_SET_TYPE(&PyArray_FloatDType, &PyArrayDTypeMeta_Type);
     ((PyTypeObject *)&PyArray_FloatDType)->tp_base = &PyArrayDescr_Type;
     if (PyType_Ready((PyTypeObject *)&PyArray_FloatDType) < 0)
@@ -222,7 +313,7 @@ PyInit_float_dtype(void)
     }
     PyArrayDTypeMeta_Spec spec;
     spec.typeobj = &PyArray_FloatDType;
-    spec.flags = 0;
+    spec.flags = NPY_DT_PARAMETRIC;
     spec.baseclass = NULL;
     PyType_Slot slots[8] = {{0, NULL}};
     spec.slots = slots;
@@ -238,10 +329,10 @@ PyInit_float_dtype(void)
     slots[4].pfunc = &float_getitem;
     slots[5].slot = NPY_DT_setitem;
     slots[5].pfunc = &float_setitem;
-    PyArrayMethod_Spec *castingimpls[2];
+    PyArrayMethod_Spec *castingimpls[4] = {NULL};
     spec.casts = castingimpls;
     PyArray_DTypeMeta *dtypes[2] = {&PyArray_FloatDType, &PyArray_FloatDType};
-    PyType_Slot float_to_float_slots[3] = {{0, NULL}};
+    PyType_Slot float_to_float_slots[4] = {{0, NULL}};
     PyArrayMethod_Spec float_to_float_spec = {
         .name = "float_to_float_cast",
         .nin = 1,
@@ -255,24 +346,73 @@ PyInit_float_dtype(void)
     float_to_float_slots[0].pfunc = &cast_float_to_float_aligned;
     float_to_float_slots[1].slot = NPY_METH_unaligned_strided_loop;
     float_to_float_slots[1].pfunc = &cast_float_to_float_unaligned;
+    float_to_float_slots[2].slot = NPY_METH_resolve_descriptors;
+    float_to_float_slots[2].pfunc = &float_to_float_resolve_descriptors;
     castingimpls[0] = &float_to_float_spec;
-    PyType_Slot pyfloat_to_from_float_slots[2] = {{0, NULL}};
+    PyType_Slot pyfloat_to_float_slots[3] = {{0, NULL}};
     PyArray_DTypeMeta *double_DType = PyArray_DTypeFromTypeNum(NPY_DOUBLE);
     Py_DecRef(double_DType);
-    PyArray_DTypeMeta *pyfloat_to_from_float_dtypes[2] = {double_DType, &PyArray_FloatDType};
-    PyArrayMethod_Spec pyfloat_to_from_float_spec = {
-        .name = "pyfloat_to_from_float_cast",
+    PyArray_DTypeMeta *pyfloat_to_float_dtypes[2] = {double_DType, &PyArray_FloatDType};
+    PyArrayMethod_Spec pyfloat_to_float_spec = {
+        .name = "pyfloat_to_float_cast",
         .nin = 1,
         .nout = 1,
-        .dtypes = pyfloat_to_from_float_dtypes,
+        .dtypes = pyfloat_to_float_dtypes,
         .casting = NPY_SAFE_CASTING,
-        .slots = pyfloat_to_from_float_slots,
+        .slots = pyfloat_to_float_slots,
         .flags = NPY_METH_NO_FLOATINGPOINT_ERRORS,
     };
-    pyfloat_to_from_float_slots[0].slot = NPY_METH_strided_loop;
-    pyfloat_to_from_float_slots[0].pfunc = &cast_float_to_float_aligned;
-    castingimpls[1] = &pyfloat_to_from_float_spec;
+    pyfloat_to_float_slots[0].slot = NPY_METH_strided_loop;
+    pyfloat_to_float_slots[0].pfunc = &cast_float_to_float_aligned;
+    pyfloat_to_float_slots[1].slot = NPY_METH_resolve_descriptors;
+    pyfloat_to_float_slots[1].pfunc = &pyfloat_to_from_float_resolve_descriptors;
+    castingimpls[1] = &pyfloat_to_float_spec;
+    PyType_Slot float_to_pyfloat_slots[3] = {{0, NULL}};
+    PyArray_DTypeMeta *float_to_pyfloat_dtypes[2] = {&PyArray_FloatDType, double_DType};
+    PyArrayMethod_Spec float_to_pyfloat_spec = {
+        .name = "float_to_pyfloat_cast",
+        .nin = 1,
+        .nout = 1,
+        .dtypes = float_to_pyfloat_dtypes,
+        .casting = NPY_SAFE_CASTING,
+        .slots = float_to_pyfloat_slots,
+        .flags = NPY_METH_NO_FLOATINGPOINT_ERRORS,
+    };
+    float_to_pyfloat_slots[0].slot = NPY_METH_strided_loop;
+    float_to_pyfloat_slots[0].pfunc = &cast_float_to_float_aligned;
+    float_to_pyfloat_slots[1].slot = NPY_METH_resolve_descriptors;
+    float_to_pyfloat_slots[1].pfunc = &pyfloat_to_from_float_resolve_descriptors;
+    castingimpls[2] = &float_to_pyfloat_spec;
     if (PyArrayInitDTypeMeta_FromSpec(&PyArray_FloatDType, &spec) < 0)
+    {
+        goto fail;
+    }
+    PyArray_DTypeMeta *multiply_floats_dtypes[3] = {&PyArray_FloatDType, &PyArray_FloatDType, &PyArray_FloatDType};
+    PyType_Slot multiply_floats_slots[3] = {{0, NULL}};
+    PyArrayMethod_Spec multiply_floats_spec = {
+        .nin = 2,
+        .nout = 1,
+        .dtypes = multiply_floats_dtypes,
+        .slots = multiply_floats_slots,
+        .name = "multiply_floats",
+        .casting = NPY_NO_CASTING,
+        .flags = 0,
+    };
+    multiply_floats_slots[0].slot = NPY_METH_strided_loop;
+    multiply_floats_slots[0].pfunc = &multipy_floats;
+    multiply_floats_slots[1].slot = NPY_METH_resolve_descriptors;
+    multiply_floats_slots[1].pfunc = &multiply_floats_resolve_descriptors;
+    if (PyUFunc_AddLoopFromSpec(ufunc, &multiply_floats_spec) < 0)
+    {
+        goto fail;
+    }
+    PyObject *promoter_dtypes = Py_BuildValue("(OOO)", double_DType, &PyArray_FloatDType, &PyArray_FloatDType);
+    PyObject *promoter = PyCapsule_New(&promote_to_float, "numpy._ufunc_promoter", NULL);
+    if (promoter == NULL)
+    {
+        goto fail;
+    }
+    if (PyUFunc_AddPromoter(ufunc, promoter_dtypes, promoter) < 0)
     {
         goto fail;
     }
