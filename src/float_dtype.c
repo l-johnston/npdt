@@ -380,6 +380,8 @@ PyInit_float_dtype(void)
     slots[4].pfunc = &float_getitem;
     slots[5].slot = NPY_DT_setitem;
     slots[5].pfunc = &float_setitem;
+    slots[6].slot = _NPY_DT_is_known_scalar_type;
+    slots[6].pfunc = &float_is_known_scalar_type;
     PyArrayMethod_Spec *castingimpls[6] = {NULL};
     spec.casts = castingimpls;
     PyArray_DTypeMeta *dtypes[2] = {&PyArray_FloatDType, &PyArray_FloatDType};
