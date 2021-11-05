@@ -33,6 +33,7 @@ typedef struct
 } PyArray_FloatDescr;
 
 static PyArray_DTypeMeta PyArray_FloatDType;
+PyObject *FloatSingleton = NULL;
 
 static int
 float_is_known_scalar_type(PyArray_DTypeMeta *NPY_UNUSED(cls), PyTypeObject *type)
@@ -126,7 +127,7 @@ static PyArray_DTypeMeta PyArray_FloatDType = {{{
     .tp_repr = (reprfunc)float_repr,
     .tp_str = (reprfunc)float_repr,
     .tp_basicsize = sizeof(PyArray_FloatDescr),
-    .tp_flags = Py_TPFLAGS_HEAPTYPE,
+    // .tp_flags = Py_TPFLAGS_HEAPTYPE,
 }}};
 
 static int
@@ -233,15 +234,17 @@ multiply_floats_resolve_descriptors(PyObject *method, PyObject *dtypes[3], PyObj
 static int
 promote_to_float(PyUFuncObject *ufunc, PyObject *dtypes[3], PyObject *signature[3], PyObject *new_dtypes[3])
 {
-    for (int i = 0; i < 3; i++)
+    *new_dtypes = PyTuple_New(3);
+    Py_INCREF(new_dtypes);
+    for (Py_ssize_t i = 0; i < 3; i++)
     {
-        PyArray_DTypeMeta *new = &PyArray_FloatDType;
+        PyObject *new = FloatSingleton;
         if (signature[i] != NULL)
         {
             new = signature[i];
         }
         Py_INCREF(new);
-        new_dtypes[i] = new;
+        PyTuple_SetItem(new_dtypes, i, new);
     }
     return 0;
 }
@@ -413,6 +416,11 @@ PyInit_float_dtype(void)
         goto fail;
     }
     if (PyUFunc_AddPromoter(ufunc, promoter_dtypes, promoter) < 0)
+    {
+        goto fail;
+    }
+    FloatSingleton = PyObject_New(PyArray_FloatDescr, (PyTypeObject *)&PyArray_FloatDType);
+    if (FloatSingleton == NULL)
     {
         goto fail;
     }
