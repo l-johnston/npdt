@@ -193,7 +193,7 @@ pyfloat_to_from_float_resolve_descriptors(PyObject *NPY_UNUSED(method), PyArray_
     loop_descrs[1] = given_descrs[1];
     if (loop_descrs[1] == NULL)
     {
-        return -1;
+        loop_descrs[1] = FloatSingleton;
     }
     Py_INCREF(loop_descrs[1]);
     return NPY_NO_CASTING | _NPY_CAST_IS_VIEW;
@@ -419,7 +419,7 @@ PyInit_float_dtype(void)
     {
         goto fail;
     }
-    FloatSingleton = PyObject_New(PyArray_FloatDescr, (PyTypeObject *)&PyArray_FloatDType);
+    FloatSingleton = PyObject_CallNoArgs((PyObject *)&PyArray_FloatDType);
     if (FloatSingleton == NULL)
     {
         goto fail;
