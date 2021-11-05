@@ -234,17 +234,15 @@ multiply_floats_resolve_descriptors(PyObject *method, PyObject *dtypes[3], PyObj
 static int
 promote_to_float(PyUFuncObject *ufunc, PyObject *dtypes[3], PyObject *signature[3], PyObject *new_dtypes[3])
 {
-    *new_dtypes = PyTuple_New(3);
-    Py_INCREF(new_dtypes);
-    for (Py_ssize_t i = 0; i < 3; i++)
+    for (int i = 0; i < 3; i++)
     {
-        PyObject *new = FloatSingleton;
+        PyObject *new = &PyArray_FloatDType;
         if (signature[i] != NULL)
         {
             new = signature[i];
         }
         Py_INCREF(new);
-        PyTuple_SetItem(new_dtypes, i, new);
+        new_dtypes[i] = new;
     }
     return 0;
 }
